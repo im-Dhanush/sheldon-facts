@@ -1,70 +1,130 @@
-# Getting Started with Create React App
+🚂 Train of Enlightenment
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Sheldon Cooper’s sarcastic brain… in a website.
+Get one fascinating (or at least interesting) fact at a time, explained in detail — with Sheldon’s wit and voice.
 
-## Available Scripts
+📸 Preview
 
-In the project directory, you can run:
+(screenshot placeholder — add one later)
 
-### `npm start`
+✨ Features
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+🧐 Did You Know? → One random fact, never a list.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+✏️ Explanation → Hidden until you ask “Explain?”, then revealed with detail.
 
-### `npm test`
+🔊 Sheldon Speaks → Fact & explanation read aloud in Sheldon-style voice.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+⏯️ Play/Stop Toggle → Click once to play, click again to stop.
 
-### `npm run build`
+🤖 AI Powered → Facts generated via OpenRouter API, with automatic model fallback.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+🛡️ Error Handling → No crashes if API fails — Sheldon just says he had a brain freeze.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+🎨 Retro Style → Black terminal-like theme with neon highlights.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+🚀 Getting Started
+1. Clone the repo
+git clone https://github.com/yourusername/train-of-enlightenment.git
+cd train-of-enlightenment
 
-### `npm run eject`
+2. Install dependencies
+npm install
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+3. Add your API key
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Create a .env file in the root:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+REACT_APP_OPENROUTER_API_KEY=your_api_key_here
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
-## Learn More
+Get a key from OpenRouter
+.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+4. Run locally
+npm start
 
-To learn React, check out the [React documentation](https://reactjs.org/).
 
-### Code Splitting
+Open → http://localhost:3000
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+⚙️ Tech Stack
 
-### Analyzing the Bundle Size
+React (frontend framework)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Tailwind CSS (styling)
 
-### Making a Progressive Web App
+OpenRouter API (fact + explanation generation)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+Web Speech API (text-to-speech)
 
-### Advanced Configuration
+🧠 How It Works
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+Prompt Engineering
 
-### Deployment
+Fact is presented as:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+“🧐 DID YOU KNOW”
 
-### `npm run build` fails to minify
+Explanation hidden until requested.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Clear instructions to AI: One fact only, then a separate explanation.
+
+Model Priority Fallback
+
+Tries models in order until one responds:
+
+mistralai/mistral-small-3.1-24b-instruct
+
+openai/gpt-3.5-turbo
+
+google/gemini-pro
+
+meta-llama/llama-3-8b-instruct
+
+Voice Playback
+
+Uses Web Speech API.
+
+Adjusted pitch/rate for “Sheldon-like” delivery.
+
+Play/Stop toggle prevents endless playback.
+
+🐞 Known Issues
+
+Sometimes facts may repeat.
+
+Occasionally AI mixes explanation into the fact section.
+
+Voices depend on the browser (Chrome works best).
+
+🌱 Future Improvements
+
+✨ Animated transitions (Framer Motion).
+
+⭐ Save & favorite facts locally.
+
+🔄 Share facts on social media.
+
+📅 Daily fact notifications (PWA support).
+
+🌍 Multilingual support.
+
+❓ Quiz mode (guess true/false).
+
+📱 Mobile app or browser extension.
+
+👨‍💻 Contributing
+
+PRs welcome!
+
+Fork the repo
+
+Create a branch
+
+Submit a pull request
+
+📜 License
+
+MIT License.
+
+💡 Built with sarcasm, curiosity, and just a hint of Bazinga!

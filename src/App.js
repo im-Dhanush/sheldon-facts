@@ -15,18 +15,39 @@ const MAX_FACT_CHARS = 300;
 const CATEGORY_KEY = "train_category_v1";
 
 export default function App() {
+  // --- State ---
   const [fact, setFact] = useState("");
-  // --- Notifications state ---
+  const [fullFact, setFullFact] = useState(null);
+  const [explanation, setExplanation] = useState("");
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const [category, setCategory] = useState("Random");
+  const [speaking, setSpeaking] = useState({ fact: false, explanation: false });
+
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     localStorage.getItem("train_notifications") === "true"
   );
 
+  const abortRef = useRef(null);
+  const cardRef = useRef(null);
+
+  // --- Load category from localStorage ---
+  useEffect(() => {
+    const savedCategory = localStorage.getItem(CATEGORY_KEY);
+    if (savedCategory) setCategory(savedCategory);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(CATEGORY_KEY, category);
+  }, [category]);
+
+  // --- Handle Notifications ---
   useEffect(() => {
     if (notificationsEnabled) {
       requestForToken().then((token) => {
         if (token) {
-          // TODO: Send token to your backend API
           console.log("User subscribed with token:", token);
+          // TODO: Send token to your backend API (/api/saveToken)
         }
       });
 
@@ -37,58 +58,31 @@ export default function App() {
     }
   }, [notificationsEnabled]);
 
-  const enableNotifications = async () => {
+  const enableNotifications = () => {
     setNotificationsEnabled(true);
     localStorage.setItem("train_notifications", "true");
   };
 
-  // Simulated daily notification (local only for now)
-  const scheduleDailyFact = () => {
-    setTimeout(() => {
-      new Notification("🚂 Train of Enlightenment", {
-        body: "Your daily Sheldon fact is ready! Open the site.",
-        icon: "/icon.png"
-      });
-    }, 5000); // 5 sec delay for demo (replace with 24h in real use)
-  };
-
-
-  const [fullFact, setFullFact] = useState(null);
-  const [explanation, setExplanation] = useState("");
-  const [showExplanation, setShowExplanation] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [category, setCategory] = useState("Random");
-  const [speaking, setSpeaking] = useState({ fact: false, explanation: false });
-
-  const abortRef = useRef(null);
-  const cardRef = useRef(null);
-
-  // --- Load saved category ---
-  useEffect(() => {
-    const c = localStorage.getItem(CATEGORY_KEY);
-    if (c) setCategory(c);
-  }, []);
-  useEffect(() => {
-    localStorage.setItem(CATEGORY_KEY, category);
-  }, [category]);
-
-  // --- Voice ---
+  // --- Text-to-Speech ---
   const getSheldonVoice = () => {
     const voices = window.speechSynthesis.getVoices();
     return (
       voices.find(v => /en-?us/i.test(v.name)) ||
-      voices.find(v => v.lang && v.lang.startsWith("en")) ||
+      voices.find(v => v.lang?.startsWith("en")) ||
       voices[0]
     );
   };
+
   const toggleSpeak = (type) => {
     const text = type === "fact" ? (fullFact || fact) : explanation;
     if (!text) return;
+
     if (speaking[type]) {
       window.speechSynthesis.cancel();
       setSpeaking(prev => ({ ...prev, [type]: false }));
       return;
     }
+
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.voice = getSheldonVoice();
@@ -96,11 +90,12 @@ export default function App() {
     utter.rate = type === "fact" ? 1.05 : 0.95;
     utter.pitch = type === "fact" ? 1.25 : 1.1;
     utter.onend = () => setSpeaking(prev => ({ ...prev, [type]: false }));
+
     setSpeaking(prev => ({ ...prev, [type]: true }));
     window.speechSynthesis.speak(utter);
   };
 
-  // --- Fetch wisdom ---
+  // --- Fetch Fact from OpenRouter ---
   const getSheldonWisdom = async () => {
     if (loading) return;
     setLoading(true);
@@ -144,12 +139,13 @@ export default function App() {
             ]
           })
         });
+
         const result = await response.json();
         const content = result?.choices?.[0]?.message?.content;
         if (!content) continue;
 
-        const factMatch = content.match(/Fact\\s*:\\s*([\\s\\S]*?)(?:\\n|$)/i);
-        const explMatch = content.match(/Explanation\\s*:\\s*([\\s\\S]*)/i);
+        const factMatch = content.match(/Fact\s*:\s*([\s\S]*?)(?:\n|$)/i);
+        const explMatch = content.match(/Explanation\s*:\s*([\s\S]*)/i);
 
         let factRaw = factMatch ? factMatch[1].trim() : content.trim();
         let explanationRaw = explMatch ? explMatch[1].trim() : "";
@@ -164,40 +160,42 @@ export default function App() {
         setLoading(false);
         return;
       } catch {
-        continue;
+        continue; // try next model
       }
     }
+
+    // All models failed
     setFact("Oops! Sheldon had a brain freeze.");
     setExplanation("");
     setLoading(false);
   };
 
-  // --- Download card as image ---
+  // --- Download Card as Image ---
   const downloadCard = async () => {
     if (!cardRef.current) return;
     const dataUrl = await htmlToImage.toPng(cardRef.current);
     download(dataUrl, "sheldon-fact-card.png");
   };
 
-  // --- Social sharing helpers ---
+  // --- Social Sharing ---
+  const shareText = `🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`;
   const shareOnTwitter = () => {
-    const text = encodeURIComponent(`🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`);
-    window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank");
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`, "_blank");
   };
   const shareOnWhatsApp = () => {
-    const text = encodeURIComponent(`🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`);
-    window.open(`https://wa.me/?text=${text}`, "_blank");
+    window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank");
   };
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(`🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`);
+    navigator.clipboard.writeText(shareText);
     alert("Copied fact to clipboard!");
   };
 
+  // --- UI ---
   return (
     <div className="min-h-screen bg-black text-green-400 flex flex-col items-center p-6 font-mono">
       <h1 className="text-green-700 text-lg mb-4">🚂 Train of Enlightenment</h1>
 
-      {/* Category */}
+      {/* Category Selection */}
       <div className="mb-4">
         <label className="text-green-400 mr-2">Choose Category:</label>
         <select
@@ -213,7 +211,7 @@ export default function App() {
         </select>
       </div>
 
-      {/* Card Content */}
+      {/* Fact Card */}
       <div
         ref={cardRef}
         className="w-full max-w-2xl bg-slate-900 border border-green-600 rounded-lg p-6 shadow-lg"
@@ -244,7 +242,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Buttons */}
+      {/* Action Buttons */}
       <div className="flex flex-wrap gap-3 mt-4">
         <button
           onClick={() => toggleSpeak("fact")}
@@ -284,22 +282,21 @@ export default function App() {
         </button>
       </div>
 
-      {/* Notifications Toggle */}
-        <div className="mt-6">
-          {notificationsEnabled ? (
-            <p className="text-green-400 text-sm">✅ Daily notifications enabled!</p>
-          ) : (
-            <button
-              onClick={enableNotifications}
-              className="px-4 py-2 rounded bg-orange-600 hover:bg-orange-700 text-white text-sm"
-            >
-              🔔 Enable Daily Fact Notifications
-            </button>
-          )}
-        </div>
+      {/* Notifications */}
+      <div className="mt-6">
+        {notificationsEnabled ? (
+          <p className="text-green-400 text-sm">✅ Daily notifications enabled!</p>
+        ) : (
+          <button
+            onClick={enableNotifications}
+            className="px-4 py-2 rounded bg-orange-600 hover:bg-orange-700 text-white text-sm"
+          >
+            🔔 Enable Daily Fact Notifications
+          </button>
+        )}
+      </div>
 
-        
-      {/* Share Buttons */}
+      {/* Share Options */}
       {fact && (
         <div className="flex flex-wrap gap-3 mt-6">
           <button onClick={downloadCard} className="px-3 py-2 rounded bg-gray-700 text-white">

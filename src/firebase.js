@@ -1,20 +1,17 @@
-// Import the functions you need from the SDKs you need
+// src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// 🔑 Load config from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCKKOFt4J0pEOxMxZs2fjtUVx-ikjcjtpU",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
   authDomain: "train-of-enlightenment.firebaseapp.com",
-  projectId: "train-of-enlightenment",
-  storageBucket: "train-of-enlightenment.firebasestorage.app",
-  messagingSenderId: "749748849397",
-  appId: "1:749748849397:web:90fdd8b8e7baf5ccb4d3bc",
-  measurementId: "G-HDCC4QP5GJ"
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: "train-of-enlightenment.appspot.com",
+  messagingSenderId: process.env.REACT_APP_FIREBASE_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
 // Initialize Firebase
@@ -22,21 +19,23 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const messaging = getMessaging(app);
 
+// Request FCM token for push notifications
 export const requestForToken = async () => {
   try {
-    const token = await getToken(messaging, { vapidKey: "YOUR_VAPID_KEY" });
+    const token = await getToken(messaging, { vapidKey: process.env.REACT_APP_FIREBASE_VAPID_KEY });
     if (token) {
-      console.log("FCM Token:", token);
-      // Save this token to your backend DB
+      console.log("✅ FCM Token:", token);
+      // TODO: Save this token to Firestore (via your backend)
       return token;
     } else {
-      console.log("No registration token available.");
+      console.warn("⚠️ No registration token available.");
     }
   } catch (err) {
-    console.error("An error occurred while retrieving token.", err);
+    console.error("❌ Error retrieving token:", err);
   }
 };
 
+// Listen for foreground messages
 export const onMessageListener = () =>
   new Promise((resolve) => {
     onMessage(messaging, (payload) => {

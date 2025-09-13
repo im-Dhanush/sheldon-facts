@@ -2,6 +2,7 @@
 import admin from "firebase-admin";
 import fetch from "node-fetch";
 
+// 🔑 Initialize Firebase Admin
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -17,7 +18,7 @@ const db = admin.firestore();
 
 export default async function handler(req, res) {
   try {
-    // --- Get tokens ---
+    // --- Get tokens from Firestore ---
     const snapshot = await db.collection("tokens").get();
     const tokens = snapshot.docs.map((doc) => doc.id);
 
@@ -25,7 +26,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ message: "No tokens to send." });
     }
 
-    // --- Get a new fact from OpenRouter ---
+    // --- Fetch a fun fact from OpenRouter ---
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -55,29 +56,29 @@ export default async function handler(req, res) {
     const factMatch = content.match(/Fact\s*:\s*([\s\S]*?)(?:\n|$)/i);
     const explMatch = content.match(/Explanation\s*:\s*([\s\S]*)/i);
 
-    let fact = factMatch ? factMatch[1].trim() : content.trim();
-    let explanation = explMatch ? explMatch[1].trim() : "";
+    const fact = factMatch ? factMatch[1].trim() : content.trim();
+    const explanation = explMatch ? explMatch[1].trim() : "";
 
-    // --- Build Notification ---
+    // --- Build FCM Notification ---
     const message = {
       notification: {
         title: "🚂 Train of Enlightenment",
         body: fact,
       },
-      tokens: tokens,
+      tokens,
     };
 
     const fcmResponse = await messaging.sendMulticast(message);
 
     return res.status(200).json({
-      message: `Sent fact to ${tokens.length} devices`,
+      message: `Sent to ${tokens.length} devices`,
       fact,
       explanation,
       success: fcmResponse.successCount,
       failure: fcmResponse.failureCount,
     });
   } catch (error) {
-    console.error("Error sending notification:", error);
+    console.error("❌ Error sending notification:", error);
     return res.status(500).json({ error: "Error sending notification" });
   }
 }

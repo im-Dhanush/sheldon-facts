@@ -8,13 +8,13 @@ import { getMessaging, getToken, onMessage } from "firebase/messaging";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "*",
+  apiKey: "AIzaSyCKKOFt4J0pEOxMxZs2fjtUVx-ikjcjtpU",
   authDomain: "train-of-enlightenment.firebaseapp.com",
   projectId: "train-of-enlightenment",
   storageBucket: "train-of-enlightenment.firebasestorage.app",
-  messagingSenderId: "*",
-  appId: "*",
-  measurementId: "*"
+  messagingSenderId: "749748849397",
+  appId: "1:749748849397:web:90fdd8b8e7baf5ccb4d3bc",
+  measurementId: "G-HDCC4QP5GJ"
 };
 
 // Initialize Firebase

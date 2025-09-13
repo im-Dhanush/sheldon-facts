@@ -1,186 +1,321 @@
 import React, { useState, useEffect, useRef } from "react";
+import * as htmlToImage from "html-to-image";
+import download from "downloadjs";
 import "./index.css";
+import { requestForToken, onMessageListener } from "./firebase";
 
-function App() {
+const MODEL_PRIORITY = [
+  "mistralai/mistral-small-3.1-24b-instruct",
+  "openai/gpt-3.5-turbo",
+  "google/gemini-pro",
+  "meta-llama/llama-3-8b-instruct"
+];
+
+const MAX_FACT_CHARS = 300;
+const CATEGORY_KEY = "train_category_v1";
+
+export default function App() {
   const [fact, setFact] = useState("");
+  // --- Notifications state ---
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    localStorage.getItem("train_notifications") === "true"
+  );
+
+  useEffect(() => {
+    if (notificationsEnabled) {
+      requestForToken().then((token) => {
+        if (token) {
+          // TODO: Send token to your backend API
+          console.log("User subscribed with token:", token);
+        }
+      });
+
+      onMessageListener().then((payload) => {
+        console.log("Foreground notification:", payload);
+        alert(`🚂 Sheldon says: ${payload.notification.body}`);
+      });
+    }
+  }, [notificationsEnabled]);
+
+  const enableNotifications = async () => {
+    setNotificationsEnabled(true);
+    localStorage.setItem("train_notifications", "true");
+  };
+
+  // Simulated daily notification (local only for now)
+  const scheduleDailyFact = () => {
+    setTimeout(() => {
+      new Notification("🚂 Train of Enlightenment", {
+        body: "Your daily Sheldon fact is ready! Open the site.",
+        icon: "/icon.png"
+      });
+    }, 5000); // 5 sec delay for demo (replace with 24h in real use)
+  };
+
+
+  const [fullFact, setFullFact] = useState(null);
   const [explanation, setExplanation] = useState("");
   const [showExplanation, setShowExplanation] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState("Random");
   const [speaking, setSpeaking] = useState({ fact: false, explanation: false });
-  const [history, setHistory] = useState([]);
-  const utteranceRef = useRef(null);
 
-  const MODEL_PRIORITY = [
-    "mistralai/mistral-small-3.1-24b-instruct",
-    "openai/gpt-3.5-turbo",
-    "google/gemini-pro",
-    "meta-llama/llama-3-8b-instruct"
-  ];
+  const abortRef = useRef(null);
+  const cardRef = useRef(null);
 
+  // --- Load saved category ---
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.onvoiceschanged = () => {};
-    }
+    const c = localStorage.getItem(CATEGORY_KEY);
+    if (c) setCategory(c);
   }, []);
+  useEffect(() => {
+    localStorage.setItem(CATEGORY_KEY, category);
+  }, [category]);
 
+  // --- Voice ---
   const getSheldonVoice = () => {
-    const voices = speechSynthesis.getVoices();
+    const voices = window.speechSynthesis.getVoices();
     return (
-      voices.find(v => v.name.toLowerCase().includes("en-us")) ||
-      voices.find(v => v.lang === "en-US") ||
+      voices.find(v => /en-?us/i.test(v.name)) ||
+      voices.find(v => v.lang && v.lang.startsWith("en")) ||
       voices[0]
     );
   };
-
-  const speakText = (text, type) => {
+  const toggleSpeak = (type) => {
+    const text = type === "fact" ? (fullFact || fact) : explanation;
     if (!text) return;
     if (speaking[type]) {
-      speechSynthesis.cancel();
+      window.speechSynthesis.cancel();
       setSpeaking(prev => ({ ...prev, [type]: false }));
       return;
     }
-
-    speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice = getSheldonVoice();
-    utterance.pitch = type === "fact" ? 1.3 : 1.15;
-    utterance.rate = type === "fact" ? 1.05 : 0.95;
-    utterance.volume = 1;
-    utterance.lang = "en-US";
-    utterance.onend = () => setSpeaking(prev => ({ ...prev, [type]: false }));
-
-    utteranceRef.current = utterance;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.voice = getSheldonVoice();
+    utter.lang = "en-US";
+    utter.rate = type === "fact" ? 1.05 : 0.95;
+    utter.pitch = type === "fact" ? 1.25 : 1.1;
+    utter.onend = () => setSpeaking(prev => ({ ...prev, [type]: false }));
     setSpeaking(prev => ({ ...prev, [type]: true }));
-    try {
-      speechSynthesis.speak(utterance);
-    } catch (err) {
-      console.warn("TTS error:", err);
-    }
+    window.speechSynthesis.speak(utter);
   };
 
+  // --- Fetch wisdom ---
   const getSheldonWisdom = async () => {
     if (loading) return;
     setLoading(true);
     setShowExplanation(false);
     setFact("");
+    setFullFact(null);
     setExplanation("");
-    speechSynthesis.cancel();
+
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     const headers = {
       Authorization: `Bearer ${process.env.REACT_APP_OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": "http://localhost:3000",
       "X-Title": "train-of-enlightenment"
     };
+
+    const categoryInstruction =
+      category === "Random"
+        ? "from any domain"
+        : `specifically about ${category.toLowerCase()}`;
 
     for (const model of MODEL_PRIORITY) {
       try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
           headers,
+          signal: controller.signal,
           body: JSON.stringify({
             model,
             messages: [
               {
                 role: "system",
-                content:
-                  "You are Sheldon Cooper — a sarcastically intelligent and precise AI. Present one concise, fun, and interesting fact (max 2 lines). Then separately give a witty, clear explanation labeled 'Explanation:'. Avoid merging them."
+                content: `You are Sheldon Cooper — sarcastically intelligent. Provide exactly one concise fun fact ${categoryInstruction}. Prefix with 'Fact:' then 'Explanation:'. Fact should be under ${MAX_FACT_CHARS} characters if possible.`
               },
               {
                 role: "user",
-                content: "Give me one fun fact (from any domain) and its explanation. Only one fact, clearly separated from explanation."
+                content: "Give me one fun fact and its explanation. Only one fact."
               }
             ]
           })
         });
-
         const result = await response.json();
-        if (!result.choices || !result.choices.length) throw new Error("No choices returned");
+        const content = result?.choices?.[0]?.message?.content;
+        if (!content) continue;
 
-        const content = result.choices[0].message.content;
-        const [rawFact, rawExplanation] = content.split(/Explanation:/i);
-        const cleanedFact = rawFact?.trim();
-        const cleanedExplanation = rawExplanation?.trim() || "No explanation found.";
+        const factMatch = content.match(/Fact\\s*:\\s*([\\s\\S]*?)(?:\\n|$)/i);
+        const explMatch = content.match(/Explanation\\s*:\\s*([\\s\\S]*)/i);
 
-        // Check if fact was repeated
-        if (history.includes(cleanedFact)) {
-          console.warn("Repeated fact detected, skipping...");
-          continue;
+        let factRaw = factMatch ? factMatch[1].trim() : content.trim();
+        let explanationRaw = explMatch ? explMatch[1].trim() : "";
+
+        if (factRaw.length > MAX_FACT_CHARS) {
+          setFullFact(factRaw);
+          factRaw = factRaw.slice(0, MAX_FACT_CHARS - 1) + "…";
         }
 
-        setFact(cleanedFact);
-        setExplanation(cleanedExplanation);
-        setHistory(prev => [cleanedFact, ...prev.slice(0, 9)]);
+        setFact(factRaw);
+        setExplanation(explanationRaw || "Explanation not clearly provided.");
         setLoading(false);
         return;
-      } catch (err) {
-        console.warn(`Model \"${model}\" failed, trying next...`);
+      } catch {
         continue;
       }
     }
-
     setFact("Oops! Sheldon had a brain freeze.");
     setExplanation("");
     setLoading(false);
   };
 
+  // --- Download card as image ---
+  const downloadCard = async () => {
+    if (!cardRef.current) return;
+    const dataUrl = await htmlToImage.toPng(cardRef.current);
+    download(dataUrl, "sheldon-fact-card.png");
+  };
+
+  // --- Social sharing helpers ---
+  const shareOnTwitter = () => {
+    const text = encodeURIComponent(`🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, "_blank");
+  };
+  const shareOnWhatsApp = () => {
+    const text = encodeURIComponent(`🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`);
+    window.open(`https://wa.me/?text=${text}`, "_blank");
+  };
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(`🧐 DID YOU KNOW?\n${fact}\n\n🚂 Train of Enlightenment`);
+    alert("Copied fact to clipboard!");
+  };
+
   return (
-    <div className="min-h-screen bg-black text-green-400 flex flex-col items-center justify-center p-4 font-mono">
-      <h1 className="mt-8 text-l text-green-700">🚂 Train of Enlightenment</h1>
-      <div className="border border-green-500 rounded-lg p-6 w-full max-w-2xl bg-slate-900 shadow-xl space-y-4">
-        <div className="border-l-2 pl-3 border-pink-500">
-          <p className="text-pink-500 font-semibold">🧐 DID YOU KNOW:</p>
-          <p className="text-green-300 mt-1 whitespace-pre-wrap break-words">{fact}</p>
-        </div>
+    <div className="min-h-screen bg-black text-green-400 flex flex-col items-center p-6 font-mono">
+      <h1 className="text-green-700 text-lg mb-4">🚂 Train of Enlightenment</h1>
 
-        {fact && (
-          <div className="flex flex-wrap gap-4">
-            <button
-              onClick={() => speakText(fact, "fact")}
-              className="bg-blue-700 hover:bg-blue-800 text-white text-xs px-4 py-2 rounded-md"
-            >
-              {speaking.fact ? "🛑 Stop" : "🔊 Hear Sheldon Say It"}
-            </button>
+      {/* Category */}
+      <div className="mb-4">
+        <label className="text-green-400 mr-2">Choose Category:</label>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="bg-slate-800 text-green-300 border border-green-600 rounded px-3 py-1"
+        >
+          <option>Random</option>
+          <option>Science</option>
+          <option>History</option>
+          <option>Pop Culture</option>
+          <option>Weird</option>
+        </select>
+      </div>
 
-            {!showExplanation && (
-              <button
-                onClick={() => setShowExplanation(true)}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white text-xs px-4 py-2 rounded-md"
-              >
-                🤔 Explain?
-              </button>
-            )}
-
-            {showExplanation && (
-              <button
-                onClick={() => speakText(explanation, "explanation")}
-                className="bg-purple-700 hover:bg-purple-800 text-white text-xs px-4 py-2 rounded-md"
-              >
-                {speaking.explanation ? "🛑 Stop" : "📢 Explain Out Loud"}
-              </button>
-            )}
+      {/* Card Content */}
+      <div
+        ref={cardRef}
+        className="w-full max-w-2xl bg-slate-900 border border-green-600 rounded-lg p-6 shadow-lg"
+      >
+        <div className="border-l-4 pl-4 border-pink-500 mb-4">
+          <div className="text-pink-500 font-semibold">🧐 DID YOU KNOW:</div>
+          <div className="text-green-300 mt-2 whitespace-pre-wrap break-words">
+            {fact || (loading ? "Fetching Sheldon-approved wisdom..." : "Click below for a fact.")}
           </div>
-        )}
+          {fullFact && (
+            <button
+              onClick={() => {
+                setFact(fullFact);
+                setFullFact(null);
+              }}
+              className="mt-2 text-xs bg-gray-800 border border-green-600 px-2 py-1 rounded"
+            >
+              Show full fact
+            </button>
+          )}
+        </div>
 
         {showExplanation && explanation && (
-          <div className="border border-green-500 rounded-md p-3 bg-slate-800">
-            <p className="text-green-400 font-semibold mb-1">✏️ EXPLANATION:</p>
-            <p className="text-green-300 whitespace-pre-wrap break-words">{explanation}</p>
+          <div className="mt-4 border border-green-600 rounded-md p-3 bg-slate-800">
+            <div className="text-green-400 font-semibold">✏️ EXPLANATION:</div>
+            <div className="text-green-300 mt-2 whitespace-pre-wrap">{explanation}</div>
           </div>
         )}
+      </div>
 
-        <div className="text-center pt-4">
+      {/* Buttons */}
+      <div className="flex flex-wrap gap-3 mt-4">
+        <button
+          onClick={() => toggleSpeak("fact")}
+          className={`px-3 py-2 rounded text-sm ${
+            speaking.fact ? "bg-red-700" : "bg-blue-700 hover:bg-blue-800"
+          } text-white`}
+        >
+          {speaking.fact ? "🛑 Stop" : "🔊 Hear Sheldon Say It"}
+        </button>
+
+        {!showExplanation && fact && (
           <button
-            onClick={getSheldonWisdom}
-            disabled={loading}
-            className="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-lg font-bold text-sm"
+            onClick={() => setShowExplanation(true)}
+            className="px-3 py-2 rounded text-sm bg-yellow-600 hover:bg-yellow-700 text-white"
           >
-            🤖 {loading ? "Thinking..." : "Give Me Sheldon’s Wisdom"}
+            🤔 Explain?
+          </button>
+        )}
+
+        {showExplanation && (
+          <button
+            onClick={() => toggleSpeak("explanation")}
+            className={`px-3 py-2 rounded text-sm ${
+              speaking.explanation ? "bg-red-700" : "bg-purple-700 hover:bg-purple-800"
+            } text-white`}
+          >
+            {speaking.explanation ? "🛑 Stop" : "📢 Explain Out Loud"}
+          </button>
+        )}
+
+        <button
+          onClick={getSheldonWisdom}
+          disabled={loading}
+          className="px-4 py-2 rounded bg-green-700 hover:bg-green-800 text-white font-bold"
+        >
+          {loading ? "Thinking..." : "🤖 New Fact"}
+        </button>
+      </div>
+
+      {/* Notifications Toggle */}
+        <div className="mt-6">
+          {notificationsEnabled ? (
+            <p className="text-green-400 text-sm">✅ Daily notifications enabled!</p>
+          ) : (
+            <button
+              onClick={enableNotifications}
+              className="px-4 py-2 rounded bg-orange-600 hover:bg-orange-700 text-white text-sm"
+            >
+              🔔 Enable Daily Fact Notifications
+            </button>
+          )}
+        </div>
+
+        
+      {/* Share Buttons */}
+      {fact && (
+        <div className="flex flex-wrap gap-3 mt-6">
+          <button onClick={downloadCard} className="px-3 py-2 rounded bg-gray-700 text-white">
+            📸 Download Card
+          </button>
+          <button onClick={shareOnTwitter} className="px-3 py-2 rounded bg-sky-600 text-white">
+            🐦 Share on Twitter
+          </button>
+          <button onClick={shareOnWhatsApp} className="px-3 py-2 rounded bg-green-600 text-white">
+            📱 Share on WhatsApp
+          </button>
+          <button onClick={copyToClipboard} className="px-3 py-2 rounded bg-gray-600 text-white">
+            📋 Copy Fact
           </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
-export default App;
